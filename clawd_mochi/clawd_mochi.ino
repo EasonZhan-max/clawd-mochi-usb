@@ -1,29 +1,26 @@
 /*
- * ╔══════════════════════════════════════════════════════════════╗
- *   CLAWD MOCHI — ESP32-C3 Super Mini + ST7789 1.54" 240×240
+ * CLAWD MOCHI - ESP32-C3 Super Mini + ST7789 1.54" 240x240
  *
- *   Wiring:
- *     SDA → GPIO 10  (hardware SPI MOSI)
- *     SCL → GPIO 8   (hardware SPI SCK)
- *     RST → GPIO 2
- *     DC  → GPIO 1
- *     CS  → GPIO 4
- *     BL  → GPIO 3
- *     VCC → 3V3
- *     GND → GND
+ * 接线：
+ *   SDA -> GPIO 10  (硬件 SPI MOSI)
+ *   SCL -> GPIO 8   (硬件 SPI SCK)
+ *   RST -> GPIO 2
+ *   DC  -> GPIO 1
+ *   CS  -> GPIO 4
+ *   BL  -> GPIO 3
+ *   VCC -> 3V3
+ *   GND -> GND
  *
- *   WiFi: "ClaWD-Mochi"  pw: clawd1234  → http://192.168.4.1
- * ╚══════════════════════════════════════════════════════════════╝
+ * 控制方式：USB 串口，波特率 115200。
+ * 常用命令：w/s/a/d/q，/text?s=hello，/canvas?on=1，/state。
  */
 
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
 #include <SPI.h>
 #include <math.h>
-#include <WiFi.h>
-#include <WebServer.h>
 
-// ── Pins ──────────────────────────────────────────────────────
+// 引脚定义
 #define TFT_CS  4
 #define TFT_DC  1
 #define TFT_RST 2
@@ -31,42 +28,49 @@
 
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
 
-// ── WiFi ──────────────────────────────────────────────────────
-const char* AP_SSID = "ClaWD-Mochi";
-const char* AP_PASS = "clawd1234";
-WebServer server(80);
+// USB 串口控制
+String usbLine;
+const uint16_t USB_LINE_MAX = 2048;
+void processUsbSerial();
 
-// ── Display ───────────────────────────────────────────────────
+// 显示屏参数
 #define DISP_W 240
 #define DISP_H 240
 
-// ── Eye constants (shared by both eye views) ──────────────────
+// 眼睛视图参数
 #define EYE_W   30
 #define EYE_H   60
 #define EYE_GAP 120
-#define EYE_OX  0     // horizontal offset
-#define EYE_OY  40    // vertical offset upward (subtracted from centre)
+#define EYE_OX  0     // 水平偏移
+#define EYE_OY  40    // 向上偏移（从中心点扣除）
 
-// ── Colours ───────────────────────────────────────────────────
+// 颜色
 uint16_t C_ORANGE, C_DARKBG, C_MUTED, C_GREEN;
 #define C_WHITE ST77XX_WHITE
 #define C_BLACK ST77XX_BLACK
 
-// ── State ─────────────────────────────────────────────────────
+// 状态
 #define VIEW_EYES_NORMAL 0
 #define VIEW_EYES_SQUISH 1
 #define VIEW_CODE        2
 #define VIEW_DRAW        3
+#define VIEW_STATUS      4
+#define VIEW_XINHUA      5
+#define VIEW_HELLO       6
+#define VIEW_SLEEP       7
 
 uint8_t  currentView  = VIEW_EYES_NORMAL;
 bool     busy         = false;
 bool     backlightOn  = true;
-uint8_t  animSpeed    = 1;   // 1=slow(default) 2=normal 3=fast
+uint8_t  animSpeed    = 1;   // 1=慢（默认）2=正常 3=快
+bool     blinkLoopOn = false;
+uint32_t blinkLoopAt = 0;
+uint8_t  blinkLoopStep = 0;
 
-uint16_t animBgColor  = 0;   // background for eye/logo animations
-uint16_t drawBgColor  = 0;   // background for canvas
+uint16_t animBgColor  = 0;   // 眼睛和 Logo 动画背景色
+uint16_t drawBgColor  = 0;   // 画布背景色
 
-// ── Terminal ──────────────────────────────────────────────────
+// 终端
 #define TERM_COLS      15
 #define TERM_ROWS       8
 #define TERM_CHAR_W    12
@@ -79,7 +83,7 @@ String  termLines[TERM_ROWS];
 uint8_t termRow     = 0;
 uint8_t termCol     = 0;
 
-// ── Logo data ─────────────────────────────────────────────────
+// Logo 数据
 #define LOGO_CX 120
 #define LOGO_CY 105
 
@@ -186,9 +190,7 @@ static const int16_t LOGO_SEGS[][4] PROGMEM = {
   {51,144,65,134},{65,134,65,134},
 };
 
-// ═════════════════════════════════════════════════════════════
-//  HELPERS
-// ═════════════════════════════════════════════════════════════
+// 工具函数
 
 int speedMs(int ms) {
   if (animSpeed == 3) return ms / 2;
@@ -210,7 +212,7 @@ void setBacklight(bool on) {
 
 void initColours() {
   // C_ORANGE = tft.color565(170, 72, 28);
-  C_ORANGE = tft.color565(218, 17, 0);
+  C_ORANGE = tft.color565(255, 0, 0);
   C_DARKBG = tft.color565(10,  12,  16);
   C_MUTED  = tft.color565(90,  88,  86);
   C_GREEN  = tft.color565(80, 220, 130);
@@ -218,9 +220,7 @@ void initColours() {
   drawBgColor = C_ORANGE;
 }
 
-// ═════════════════════════════════════════════════════════════
-//  LOGO
-// ═════════════════════════════════════════════════════════════
+// Logo 绘制
 
 void drawLogoFilled(uint16_t bg, uint16_t fg) {
   tft.fillScreen(bg);
@@ -236,11 +236,9 @@ void drawLogoFilled(uint16_t bg, uint16_t fg) {
   tft.setCursor(LOGO_CX - 53, 210); tft.print("Anthropic");
 }
 
-// ═════════════════════════════════════════════════════════════
-//  VIEWS
-// ═════════════════════════════════════════════════════════════
+// 画面绘制
 
-// Eye helpers — shared constants via #define EYE_*
+// 眼睛绘制辅助函数，共用 EYE_* 参数
 inline int16_t eyeLX(int16_t ox) {
   return (DISP_W - (EYE_W * 2 + EYE_GAP)) / 2 + EYE_OX + ox;
 }
@@ -289,8 +287,28 @@ void drawSquishEyes(bool closed = false) {
   }
 }
 
+void drawSleepFrame(uint8_t phase) {
+  tft.fillScreen(C_BLACK);
+  tft.fillRoundRect(56, 118, 48, 8, 4, C_MUTED);
+  tft.fillRoundRect(136, 118, 48, 8, 4, C_MUTED);
+
+  tft.setTextColor(C_WHITE);
+  tft.setTextWrap(false);
+  tft.setTextSize(2);
+  tft.setCursor(146, 54); tft.print("Z");
+  if (phase >= 1) {
+    tft.setTextSize(3);
+    tft.setCursor(166, 34); tft.print("Z");
+  }
+  if (phase >= 2) {
+    tft.setTextSize(4);
+    tft.setCursor(190, 12); tft.print("Z");
+  }
+}
+
 void drawCodeView() {
   termMode = false;
+  currentView = VIEW_CODE;
   tft.fillScreen(C_DARKBG);
   tft.fillRect(0, 0,          DISP_W, 4, C_ORANGE);
   tft.fillRect(0, DISP_H - 4, DISP_W, 4, C_ORANGE);
@@ -301,9 +319,131 @@ void drawCodeView() {
   tft.fillRect((DISP_W - 96) / 2, DISP_H / 2 + 52, 96, 3, C_ORANGE);
 }
 
-// ═════════════════════════════════════════════════════════════
-//  TERMINAL
-// ═════════════════════════════════════════════════════════════
+void drawUsbReadyView() {
+  termMode = false;
+  tft.fillScreen(C_DARKBG);
+  tft.fillRect(0, 0, DISP_W, 4, C_ORANGE);
+  tft.fillRect(0, DISP_H - 4, DISP_W, 4, C_ORANGE);
+
+  tft.setTextWrap(false);
+  tft.setTextColor(C_ORANGE); tft.setTextSize(3);
+  tft.setCursor(18, 24); tft.print("Clawd");
+  tft.setTextColor(C_WHITE);
+  tft.setCursor(18, 56); tft.print("Mochi");
+
+  tft.drawRoundRect(18, 100, 204, 54, 8, C_ORANGE);
+  tft.setTextColor(C_WHITE); tft.setTextSize(2);
+  tft.setCursor(42, 116); tft.print("USB ready");
+  tft.setTextColor(C_MUTED); tft.setTextSize(1);
+  tft.setCursor(42, 140); tft.print("Open controller page");
+
+  tft.setTextColor(C_MUTED);
+  tft.setCursor(18, 178); tft.print("baud 115200");
+  tft.setCursor(18, 196); tft.print("waiting for pairing...");
+}
+
+void drawCenteredText2(const char* line1, const char* line2, uint8_t size1, uint8_t size2, uint16_t fg, uint16_t bg) {
+  termMode = false;
+  tft.fillScreen(bg);
+  tft.setTextWrap(false);
+  int16_t x1, y1;
+  uint16_t w, h;
+  const int16_t centerY = line2 ? 92 : 112;
+
+  tft.setTextSize(size1);
+  tft.getTextBounds(line1, 0, 0, &x1, &y1, &w, &h);
+  tft.setTextColor(fg);
+  tft.setCursor((DISP_W - w) / 2, centerY - h / 2);
+  tft.print(line1);
+
+  if (line2) {
+    tft.setTextSize(size2);
+    tft.getTextBounds(line2, 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor((DISP_W - w) / 2, 132 - h / 2);
+    tft.print(line2);
+  }
+}
+
+void drawTypewriterLine(const char* text, uint8_t size, int16_t centerY, uint16_t fg, uint16_t bg) {
+  int16_t x1, y1;
+  uint16_t w, h;
+  tft.setTextSize(size);
+  tft.getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
+  tft.setTextColor(fg, bg);
+  tft.setCursor((DISP_W - w) / 2, centerY - h / 2);
+  for (uint8_t i = 0; text[i]; i++) {
+    tft.print(text[i]);
+    delay(speedMs(85));
+  }
+}
+
+void drawTypewriterText2(const char* line1, const char* line2, uint8_t size1, uint8_t size2, uint16_t fg, uint16_t bg) {
+  termMode = false;
+  busy = true;
+  tft.fillScreen(bg);
+  tft.setTextWrap(false);
+  drawTypewriterLine(line1, size1, line2 ? 92 : 112, fg, bg);
+  if (line2) {
+    delay(speedMs(180));
+    drawTypewriterLine(line2, size2, 132, fg, bg);
+  }
+  busy = false;
+}
+
+void drawXinStrokes(int16_t x, int16_t y, uint8_t s, uint16_t c) {
+  int16_t u = s;
+  tft.fillRect(x + 1*u, y + 0*u, 5*u, u, c);
+  tft.fillRect(x + 3*u, y + 0*u, u, 8*u, c);
+  tft.fillRect(x + 0*u, y + 3*u, 7*u, u, c);
+  tft.fillRect(x + 1*u, y + 6*u, 5*u, u, c);
+  tft.drawLine(x + 3*u, y + 4*u, x + 0*u, y + 10*u, c);
+  tft.drawLine(x + 4*u, y + 4*u, x + 7*u, y + 10*u, c);
+  tft.fillRect(x + 9*u, y + 0*u, 7*u, u, c);
+  tft.fillRect(x + 9*u, y + 0*u, u, 10*u, c);
+  tft.fillRect(x + 9*u, y + 4*u, 7*u, u, c);
+  tft.fillRect(x + 12*u, y + 4*u, u, 8*u, c);
+}
+
+void drawHuaStrokes(int16_t x, int16_t y, uint8_t s, uint16_t c) {
+  int16_t u = s;
+  tft.drawLine(x + 3*u, y + 0*u, x + 0*u, y + 5*u, c);
+  tft.drawLine(x + 4*u, y + 0*u, x + 1*u, y + 5*u, c);
+  tft.fillRect(x + 3*u, y + 2*u, u, 10*u, c);
+  tft.fillRect(x + 7*u, y + 0*u, u, 7*u, c);
+  tft.drawLine(x + 7*u, y + 4*u, x + 14*u, y + 1*u, c);
+  tft.drawLine(x + 7*u, y + 5*u, x + 14*u, y + 2*u, c);
+  tft.fillRect(x + 14*u, y + 1*u, u, 5*u, c);
+  tft.fillRect(x + 7*u, y + 6*u, 8*u, u, c);
+  tft.fillRect(x + 0*u, y + 9*u, 16*u, u, c);
+  tft.fillRect(x + 8*u, y + 7*u, u, 6*u, c);
+}
+
+void drawXinhuaView() {
+  currentView = VIEW_XINHUA;
+  drawTypewriterText2("Hello!", "Xinhua", 4, 4, C_BLACK, animBgColor);
+}
+
+void drawHelloEasonView() {
+  currentView = VIEW_HELLO;
+  drawTypewriterText2("Hello!", "Eason", 4, 4, C_BLACK, animBgColor);
+}
+
+void drawStatusView() {
+  termMode = false;
+  currentView = VIEW_STATUS;
+  tft.fillScreen(C_DARKBG);
+  tft.fillRect(0, 0, DISP_W, 4, C_ORANGE);
+  tft.setTextColor(C_ORANGE); tft.setTextSize(2);
+  tft.setCursor(54, 18); tft.print("STATUS");
+  tft.setTextColor(C_WHITE); tft.setTextSize(2);
+  tft.setCursor(18, 58); tft.print("View: "); tft.print(currentView);
+  tft.setCursor(18, 86); tft.print("Speed: "); tft.print(animSpeed);
+  tft.setCursor(18, 114); tft.print("Busy: "); tft.print(busy ? "yes" : "no");
+  tft.setCursor(18, 142); tft.print("Term: "); tft.print(termMode ? "on" : "off");
+  tft.setCursor(18, 170); tft.print("Light: "); tft.print(backlightOn ? "on" : "off");
+}
+
+// 终端显示
 
 void termClear() {
   for (uint8_t i = 0; i < TERM_ROWS; i++) termLines[i] = "";
@@ -317,19 +457,19 @@ void termDrawHeader() {
   tft.drawFastHLine(0, TERM_PAD_Y, DISP_W, C_ORANGE);
 }
 
-// Prefix "clawd:~$ " in green, drawn only when the row has content
+// 绿色终端提示符，只在当前行绘制
 void termDrawPrefix(int16_t yy) {
   tft.setTextColor(C_GREEN); tft.setTextSize(1);
   tft.setCursor(TERM_PAD_X, yy + 6);
   tft.print("clawd:~$ ");
 }
 
-#define PREFIX_PX 54   // 9 chars × 6px = 54px at textSize 1
+#define PREFIX_PX 54   // 提示符宽度：9 个字符 x 6px，textSize=1
 
 void termDrawLine(uint8_t r) {
   const int16_t yy = TERM_PAD_Y + 4 + r * TERM_CHAR_H;
   tft.fillRect(0, yy, DISP_W, TERM_CHAR_H, C_DARKBG);
-  // show prefix only on the currently active (cursor) line
+  // 只在当前光标行显示提示符
   if (r == termRow) termDrawPrefix(yy);
   tft.setTextColor(C_WHITE); tft.setTextSize(2);
   tft.setCursor(TERM_PAD_X + PREFIX_PX, yy + 1);
@@ -345,23 +485,23 @@ void termDrawLastChar() {
   const int16_t yy    = TERM_PAD_Y + 4 + termRow * TERM_CHAR_H;
   const int16_t baseX = TERM_PAD_X + PREFIX_PX;
   const uint8_t prev  = termCol - 1;
-  // erase prev cell (had cursor block)
+  // 擦除上一个光标块
   tft.fillRect(baseX + prev * TERM_CHAR_W, yy + 1, TERM_CHAR_W, TERM_CHAR_H - 1, C_DARKBG);
   tft.setTextColor(C_WHITE); tft.setTextSize(2);
   tft.setCursor(baseX + prev * TERM_CHAR_W, yy + 1);
   tft.print(termLines[termRow][prev]);
-  // new cursor
+  // 绘制新光标
   tft.fillRect(baseX + termCol * TERM_CHAR_W, yy + 1, TERM_CHAR_W - 2, TERM_CHAR_H - 2, C_GREEN);
 }
 
 void termDrawBackspace() {
   const int16_t yy    = TERM_PAD_Y + 4 + termRow * TERM_CHAR_H;
   const int16_t baseX = TERM_PAD_X + PREFIX_PX;
-  // erase deleted char + old cursor
+  // 擦除被删除字符和旧光标
   tft.fillRect(baseX + termCol * TERM_CHAR_W, yy + 1, TERM_CHAR_W * 2, TERM_CHAR_H - 1, C_DARKBG);
-  // new cursor
+  // 绘制新光标
   tft.fillRect(baseX + termCol * TERM_CHAR_W, yy + 1, TERM_CHAR_W - 2, TERM_CHAR_H - 2, C_GREEN);
-  // if line now empty, erase the prefix too
+  // 当前行为空时同时擦除提示符
   if (termLines[termRow].length() == 0) {
     tft.fillRect(0, yy, TERM_PAD_X + PREFIX_PX, TERM_CHAR_H, C_DARKBG);
   }
@@ -383,12 +523,12 @@ void termScroll() {
 void termAddChar(char c) {
   if (c == '\n' || c == '\r') {
     const int16_t yy = TERM_PAD_Y + 4 + termRow * TERM_CHAR_H;
-    // erase cursor on current row
+    // 擦除当前行光标
     tft.fillRect(TERM_PAD_X + PREFIX_PX + termCol * TERM_CHAR_W,
                  yy + 1, TERM_CHAR_W, TERM_CHAR_H - 1, C_DARKBG);
     termRow++; termCol = 0;
     if (termRow >= TERM_ROWS) { termScroll(); return; }
-    termDrawLine(termRow);  // draws prefix on new line
+    termDrawLine(termRow);  // 在新行绘制提示符
   } else if (c == '\b' || c == 127) {
     if (termCol > 0) {
       termCol--;
@@ -400,7 +540,7 @@ void termAddChar(char c) {
       termRow++; termCol = 0;
       if (termRow >= TERM_ROWS) { termScroll(); return; }
     }
-    // draw prefix on first char of this line
+    // 当前行第一个字符出现时绘制提示符
     if (termCol == 0) termDrawPrefix(TERM_PAD_Y + 4 + termRow * TERM_CHAR_H);
     termLines[termRow] += c;
     termCol++;
@@ -408,10 +548,31 @@ void termAddChar(char c) {
   }
 }
 
-// ═════════════════════════════════════════════════════════════
-//  ANIMATIONS
-// ═════════════════════════════════════════════════════════════
+// 动画
 
+void startBlinkLoop() {
+  termMode = false;
+  currentView = VIEW_EYES_NORMAL;
+  blinkLoopOn = true;
+  blinkLoopAt = 0;
+  blinkLoopStep = 0;
+  drawNormalEyes(0, false);
+}
+
+void stopBlinkLoop() {
+  blinkLoopOn = false;
+}
+
+void updateBlinkLoop() {
+  if (!blinkLoopOn || busy) return;
+  const uint32_t now = millis();
+  const uint16_t waits[] = {1800, 100, 80, 100, 2200};
+  if (blinkLoopAt != 0 && now - blinkLoopAt < (uint32_t)speedMs(waits[blinkLoopStep])) return;
+  blinkLoopStep = (blinkLoopStep + 1) % 5;
+  const bool closed = blinkLoopStep == 1 || blinkLoopStep == 3;
+  drawNormalEyes(0, closed);
+  blinkLoopAt = now;
+}
 void animNormalEyes() {
   busy = true;
   const int16_t offs[] = {-16, 16, -16, 16, 0};
@@ -433,6 +594,18 @@ void animSquishEyes() {
   busy = false;
 }
 
+void animSleepView() {
+  termMode = false;
+  currentView = VIEW_SLEEP;
+  busy = true;
+  for (uint8_t i = 0; i < 6; i++) {
+    drawSleepFrame(i % 3);
+    delay(speedMs(420));
+  }
+  drawSleepFrame(2);
+  busy = false;
+}
+
 void animLogoReveal() {
   busy = true;
   tft.fillScreen(animBgColor);
@@ -443,16 +616,14 @@ void animLogoReveal() {
     int16_t y2 = pgm_read_word(&LOGO_SEGS[i][3]);
     tft.drawLine(x1, y1, x2, y2, C_WHITE);
     tft.drawLine(x1 + 1, y1, x2 + 1, y2, C_WHITE);
-    if (i % 4 == 0) { server.handleClient(); delay(speedMs(8)); }
+    if (i % 4 == 0) { processUsbSerial(); delay(speedMs(8)); }
   }
   drawLogoFilled(animBgColor, C_WHITE);
   delay(1500);
   busy = false;
 }
 
-// ═════════════════════════════════════════════════════════════
-//  WEB PAGE
-// ═════════════════════════════════════════════════════════════
+// 旧版网页界面（USB 版本不再使用）
 const char INDEX_HTML[] PROGMEM = R"rawhtml(
 <!DOCTYPE html>
 <html lang="en">
@@ -649,7 +820,7 @@ let tt;
 
 const spdLabels = ['','slow','normal','fast'];
 
-// ── Toast ──────────────────────────────────────────────────────
+// 提示消息
 function toast(msg, ok=true) {
   const el = document.getElementById('toast');
   el.textContent = msg;
@@ -659,7 +830,7 @@ function toast(msg, ok=true) {
   tt = setTimeout(() => el.classList.remove('show'), 1300);
 }
 
-// ── Busy ────────────────────────────────────────────────────────
+// 忙碌状态
 function setBusy(b) {
   isBusy = b;
   document.getElementById('busy').classList.toggle('show', b);
@@ -674,7 +845,7 @@ function setBusy(b) {
   });
 }
 
-// ── HTTP ────────────────────────────────────────────────────────
+// 旧版 HTTP 请求（USB 版本不再使用）
 async function req(path) {
   try { const r = await fetch(path); return r.ok; }
   catch(e) { toast('no connection', false); return false; }
@@ -691,7 +862,7 @@ async function waitNotBusy() {
   }
 }
 
-// ── Background colour ───────────────────────────────────────────
+// 背景色
 async function onBgChange(hex) {
   if (canvasOpen) {
     await req('/draw/clear?bg=' + encodeURIComponent(hex));
@@ -701,13 +872,13 @@ async function onBgChange(hex) {
   redrawCanvas(hex);
 }
 
-// ── Speed ───────────────────────────────────────────────────────
+// 动画速度
 async function setSpeed(v) {
   document.getElementById('spdV').textContent = spdLabels[v];
   await req('/speed?v=' + v);
 }
 
-// ── Views ───────────────────────────────────────────────────────
+// 视图切换
 async function setView(v) {
   if (isBusy || termOpen || canvasOpen) return;
   if (v === 3) { toggleCanvas(); return; }  // canvas button in grid
@@ -732,9 +903,9 @@ async function setView(v) {
   setBusy(false);
 }
 
-// ── Logo animations (kept for startup, not exposed in UI) ──────
+// Logo 动画
 
-// ── Backlight ───────────────────────────────────────────────────
+// 背光控制
 async function toggleBL() {
   blOn = !blOn;
   await req('/backlight?on=' + (blOn ? 1 : 0));
@@ -744,7 +915,7 @@ async function toggleBL() {
   b.classList.toggle('dim', !blOn);
 }
 
-// ── Canvas toggle ───────────────────────────────────────────────
+// 画布开关
 async function toggleCanvas() {
   canvasOpen = !canvasOpen;
   document.getElementById('cwrap').classList.toggle('open', canvasOpen);
@@ -758,7 +929,7 @@ async function toggleCanvas() {
     const bg = document.getElementById('bgCol').value;
     redrawCanvas(bg);
     await req('/draw/clear?bg=' + encodeURIComponent(bg));
-    // lock all other buttons
+    // 锁定其他按钮
     document.querySelectorAll('.vbtn,.lbtn').forEach(b => b.disabled = true);
     toast('canvas active');
   } else {
@@ -767,7 +938,7 @@ async function toggleCanvas() {
   }
 }
 
-// ── Terminal ────────────────────────────────────────────────────
+// 终端
 const tin = document.getElementById('tin');
 let lastVal = '';
 tin.addEventListener('input', async () => {
@@ -794,7 +965,7 @@ async function closeTerm() {
   toast('terminal closed');
 }
 
-// ── Canvas drawing — send full stroke on finger lift ────────────
+// 画布绘制：松开鼠标或手指后发送整条笔画
 const cvs = document.getElementById('cvs');
 const ctx = cvs.getContext('2d');
 let strokePts = [];
@@ -817,7 +988,7 @@ function startDraw(e) {
   strokePts = [];
   const p = getPos(e); lastX = p.x; lastY = p.y;
   strokePts.push({ x: Math.round(p.x), y: Math.round(p.y) });
-  // draw dot on canvas preview only — no display send yet
+  // 只在网页画布预览中画点，暂不发送到屏幕
   ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
   ctx.fillStyle = document.getElementById('penCol').value; ctx.fill();
 }
@@ -847,7 +1018,7 @@ cvs.addEventListener('touchstart', startDraw, {passive:false});
 cvs.addEventListener('touchmove',  moveDraw,  {passive:false});
 cvs.addEventListener('touchend',   endDraw);
 
-// Clear = clear both web canvas and display
+// 清空网页画布和屏幕画布
 async function clearAll() {
   const bg = document.getElementById('bgCol').value;
   redrawCanvas(bg);
@@ -855,16 +1026,16 @@ async function clearAll() {
   toast('cleared');
 }
 
-// Init: sync speed and backlight from ESP32, reset bg to default
+// 初始化：从 ESP32 同步速度和背光状态，并重置默认背景色
 (async () => {
   try {
     const r = await fetch('/state');
     const j = await r.json();
-    // Sync speed
+    // 同步速度
     const spd = j.speed || 1;
     document.getElementById('spd').value = spd;
     document.getElementById('spdV').textContent = spdLabels[spd];
-    // Sync backlight
+    // 同步背光
     if (j.bl === false) {
       blOn = false;
       const b = document.getElementById('blBtn');
@@ -872,7 +1043,7 @@ async function clearAll() {
       b.classList.remove('on'); b.classList.add('dim');
     }
   } catch(e) {}
-  // Always reset bg picker to default orange on page load
+  // 页面加载时将背景色选择器重置为默认橙色
   document.getElementById('bgCol').value = '#aa4818';
   redrawCanvas('#aa4818');
 })();
@@ -881,31 +1052,79 @@ async function clearAll() {
 </html>
 )rawhtml";
 
-// ═════════════════════════════════════════════════════════════
-//  WEB ROUTES
-// ═════════════════════════════════════════════════════════════
+// USB 串口命令路由
 
-void routeRoot() {
-  server.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate");
-  server.sendHeader("Pragma", "no-cache");
-  server.send_P(200, "text/html", INDEX_HTML);
+int hexNibble(char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+  return -1;
 }
 
-void routeCmd() {
-  if (!server.hasArg("k") || server.arg("k").isEmpty()) {
-    server.send(400, "application/json", "{\"e\":1}"); return;
+String urlDecode(String s) {
+  String out;
+  out.reserve(s.length());
+  for (uint16_t i = 0; i < s.length(); i++) {
+    const char c = s[i];
+    if (c == '+') {
+      out += ' ';
+    } else if (c == '%' && i + 2 < s.length()) {
+      const int hi = hexNibble(s[i + 1]);
+      const int lo = hexNibble(s[i + 2]);
+      if (hi >= 0 && lo >= 0) {
+        out += char((hi << 4) | lo);
+        i += 2;
+      } else {
+        out += c;
+      }
+    } else {
+      out += c;
+    }
   }
-  const char c = server.arg("k")[0];
+  return out;
+}
+
+String usbArg(const String& query, const char* key, bool* found = nullptr) {
+  if (found) *found = false;
+  const String wanted(key);
+  int start = 0;
+  while (start <= (int)query.length()) {
+    int amp = query.indexOf('&', start);
+    if (amp < 0) amp = query.length();
+    const String pair = query.substring(start, amp);
+    const int eq = pair.indexOf('=');
+    const String name = eq >= 0 ? pair.substring(0, eq) : pair;
+    if (name == wanted) {
+      if (found) *found = true;
+      return eq >= 0 ? urlDecode(pair.substring(eq + 1)) : "";
+    }
+    start = amp + 1;
+  }
+  return "";
+}
+
+String routeCmd(const String& query) {
+  bool hasK = false;
+  const String key = usbArg(query, "k", &hasK);
+  if (!hasK || key.isEmpty()) return "{\"e\":1}";
+  const char c = key[0];
 
   if (termMode) {
-    if (c == 'q') { termMode = false; drawCodeView(); }
-    server.send(200, "application/json", "{\"ok\":1}"); return;
+    if (c == 'q') { termMode = false; drawCodeView(); return "{\"ok\":1}"; }
+    termMode = false;
   }
 
-  server.send(200, "application/json", "{\"ok\":1}");
+  if (c != 'b') stopBlinkLoop();
+
   switch (c) {
+    case 'b':
+      if (blinkLoopOn) { stopBlinkLoop(); drawNormalEyes(0, false); }
+      else startBlinkLoop();
+      break;
     case 'w': currentView = VIEW_EYES_NORMAL; animNormalEyes(); break;
     case 's': currentView = VIEW_EYES_SQUISH; animSquishEyes(); break;
+    case 'z': animSleepView(); break;
+    case 'c': drawCodeView(); break;
     case 'd':
       currentView = VIEW_CODE; drawCodeView();
       termMode = true; termClear(); termFullRedraw(); break;
@@ -913,25 +1132,40 @@ void routeCmd() {
       currentView = VIEW_EYES_NORMAL;
       animLogoReveal();
       break;
+    case 't': drawStatusView(); break;
+    case 'x': drawXinhuaView(); break;
+    case 'e': drawHelloEasonView(); break;
   }
+  return "{\"ok\":1}";
 }
 
-void routeChar() {
-  if (!termMode) { server.send(200, "application/json", "{\"ok\":1}"); return; }
-  const String val = server.arg("c");
+String routeChar(const String& query) {
+  if (!termMode) { currentView = VIEW_CODE; termMode = true; termClear(); termFullRedraw(); }
+  const String val = usbArg(query, "c");
   if (val.length() > 0) termAddChar(val[0]);
-  server.send(200, "application/json", "{\"ok\":1}");
+  return "{\"ok\":1}";
 }
 
-void routeSpeed() {
-  if (server.hasArg("v")) animSpeed = constrain(server.arg("v").toInt(), 1, 3);
-  server.send(200, "application/json", "{\"ok\":1}");
+String routeText(const String& query) {
+  if (!termMode) { currentView = VIEW_CODE; termMode = true; termClear(); termFullRedraw(); }
+  const String val = usbArg(query, "s");
+  for (uint16_t i = 0; i < val.length(); i++) termAddChar(val[i]);
+  return "{\"ok\":1}";
 }
 
-// /redraw?bg=hex — set animBg and immediately redraw current view
-void routeRedraw() {
-  if (server.hasArg("bg")) {
-    animBgColor = hexToRgb565(server.arg("bg"));
+String routeSpeed(const String& query) {
+  bool hasV = false;
+  const String v = usbArg(query, "v", &hasV);
+  if (hasV) animSpeed = constrain(v.toInt(), 1, 3);
+  return "{\"ok\":1}";
+}
+
+// /redraw?bg=hex：设置背景色并立即重绘当前视图
+String routeRedraw(const String& query) {
+  bool hasBg = false;
+  const String bg = usbArg(query, "bg", &hasBg);
+  if (hasBg) {
+    animBgColor = hexToRgb565(bg);
     drawBgColor = animBgColor;
   }
   switch (currentView) {
@@ -939,31 +1173,37 @@ void routeRedraw() {
     case VIEW_EYES_SQUISH: drawSquishEyes(); break;
     case VIEW_CODE:        drawCodeView();   break;
     case VIEW_DRAW:        tft.fillScreen(drawBgColor); break;
+    case VIEW_STATUS:      drawStatusView(); break;
+    case VIEW_XINHUA:      drawXinhuaView(); break;
+    case VIEW_HELLO:       drawHelloEasonView(); break;
+    case VIEW_SLEEP:       drawSleepFrame(2); break;
   }
-  server.send(200, "application/json", "{\"ok\":1}");
+  return "{\"ok\":1}";
 }
 
-void routeCanvas() {
-  const bool on = server.hasArg("on") && server.arg("on") == "1";
+String routeCanvas(const String& query) {
+  const bool on = usbArg(query, "on") == "1";
   if (on) { currentView = VIEW_DRAW; tft.fillScreen(drawBgColor); }
-  server.send(200, "application/json", "{\"ok\":1}");
+  return "{\"ok\":1}";
 }
 
-void routeDrawClear() {
-  const String bg = server.hasArg("bg") ? server.arg("bg") : "#aa4818";
-  drawBgColor = hexToRgb565(bg);
-  animBgColor = drawBgColor;  // keep in sync
+String routeDrawClear(const String& query) {
+  bool hasBg = false;
+  const String bg = usbArg(query, "bg", &hasBg);
+  drawBgColor = hexToRgb565(hasBg ? bg : "#ff0000");
+  animBgColor = drawBgColor;  // 保持同步
   currentView = VIEW_DRAW; termMode = false;
   tft.fillScreen(drawBgColor);
-  server.send(200, "application/json", "{\"ok\":1}");
+  return "{\"ok\":1}";
 }
 
-void routeDrawStroke() {
-  if (!server.hasArg("pts") || !server.hasArg("pen")) {
-    server.send(200, "application/json", "{\"ok\":1}"); return;
-  }
-  const uint16_t color = hexToRgb565(server.arg("pen"));
-  const String   data  = server.arg("pts");
+String routeDrawStroke(const String& query) {
+  bool hasPts = false, hasPen = false;
+  const String data = usbArg(query, "pts", &hasPts);
+  const String pen = usbArg(query, "pen", &hasPen);
+  if (!hasPts || !hasPen) return "{\"ok\":1}";
+
+  const uint16_t color = hexToRgb565(pen);
   currentView = VIEW_DRAW;
 
   struct Pt { int16_t x, y; };
@@ -988,15 +1228,15 @@ void routeDrawStroke() {
     }
     start = semi + 1;
   }
-  server.send(200, "application/json", "{\"ok\":1}");
+  return "{\"ok\":1}";
 }
 
-void routeBacklight() {
-  setBacklight(server.hasArg("on") && server.arg("on") == "1");
-  server.send(200, "application/json", "{\"ok\":1}");
+String routeBacklight(const String& query) {
+  setBacklight(usbArg(query, "on") == "1");
+  return "{\"ok\":1}";
 }
 
-// Convert RGB565 back to #RRGGBB for state endpoint
+// 将 RGB565 转回 #RRGGBB，供状态接口使用
 String rgb565ToHex(uint16_t c) {
   uint8_t r = ((c >> 11) & 0x1F) << 3;
   uint8_t g = ((c >> 5)  & 0x3F) << 2;
@@ -1006,21 +1246,67 @@ String rgb565ToHex(uint16_t c) {
   return String(buf);
 }
 
-void routeState() {
+String routeState() {
   String j = "{\"view\":"; j += currentView;
   j += ",\"busy\":";   j += busy        ? "true" : "false";
   j += ",\"term\":";   j += termMode    ? "true" : "false";
   j += ",\"bl\":";     j += backlightOn ? "true" : "false";
   j += ",\"speed\":";  j += animSpeed;
   j += "}";
-  server.send(200, "application/json", j);
+  return j;
 }
 
-void routeNotFound() { server.send(404, "text/plain", "not found"); }
+String usbHelp() {
+  return "commands: /cmd?k=w|s|z|c|d|a|q|t|x|e|b /char?c=X /text?s=hello /speed?v=1..3 /redraw?bg=#ff0000 /canvas?on=1 /draw/clear?bg=#ff0000 /draw/stroke?pen=ff0000&pts=10,10;20,20 /backlight?on=1 /state";
+}
 
-// ═════════════════════════════════════════════════════════════
-//  SETUP
-// ═════════════════════════════════════════════════════════════
+void handleUsbCommand(String line) {
+  line.trim();
+  if (line.isEmpty()) return;
+
+  if (line.length() == 1 && String("wszcdaqtxeb").indexOf(line[0]) >= 0) {
+    line = String("/cmd?k=") + line;
+  }
+
+  const int q = line.indexOf('?');
+  const String path = q >= 0 ? line.substring(0, q) : line;
+  const String query = q >= 0 ? line.substring(q + 1) : "";
+  String response;
+
+  if (path == "/cmd") response = routeCmd(query);
+  else if (path == "/char") response = routeChar(query);
+  else if (path == "/text") response = routeText(query);
+  else if (path == "/speed") response = routeSpeed(query);
+  else if (path == "/redraw") response = routeRedraw(query);
+  else if (path == "/canvas") response = routeCanvas(query);
+  else if (path == "/draw/clear") response = routeDrawClear(query);
+  else if (path == "/draw/stroke") response = routeDrawStroke(query);
+  else if (path == "/backlight") response = routeBacklight(query);
+  else if (path == "/state") response = routeState();
+  else if (path == "/status") { drawStatusView(); response = routeState(); }
+  else if (path == "/help" || path == "help") response = usbHelp();
+  else response = "{\"e\":404}";
+
+  Serial.println(response);
+}
+
+void processUsbSerial() {
+  while (Serial.available() > 0) {
+    const char c = Serial.read();
+    if (c == '\r') continue;
+    if (c == '\n') {
+      handleUsbCommand(usbLine);
+      usbLine = "";
+    } else if (usbLine.length() < USB_LINE_MAX) {
+      usbLine += c;
+    } else {
+      usbLine = "";
+      Serial.println("{\"e\":\"line too long\"}");
+    }
+  }
+}
+
+// 初始化
 
 void setup() {
   Serial.begin(115200);
@@ -1034,54 +1320,26 @@ void setup() {
   tft.setRotation(1);
   initColours();
 
-  // ── Boot splash ────────────────────────────────────────────
+  // 启动画面
   tft.fillScreen(animBgColor);
   tft.setTextColor(C_WHITE); tft.setTextSize(3);
   tft.setCursor(DISP_W / 2 - 54, DISP_H / 2 - 22); tft.print("Clawd");
   tft.setCursor(DISP_W / 2 - 54, DISP_H / 2 + 14); tft.print("Mochi");
   delay(1200);
 
-  // ── Logo shown once at startup ─────────────────────────────
+  // 开机显示一次 Logo 动画
   animLogoReveal();
 
-  // ── Start WiFi ─────────────────────────────────────────────
-  WiFi.mode(WIFI_AP);
-  WiFi.softAP(AP_SSID, AP_PASS);
+  // 初始化 USB 串口提示
+  Serial.println("Clawd Mochi USB ready. Send /help for commands.");
 
-  // ── WiFi info screen (stays until first web request) ───────
-  tft.fillScreen(C_DARKBG);
-  tft.fillRect(0, 0, DISP_W, 4, C_ORANGE);
-  tft.setTextColor(C_WHITE);  tft.setTextSize(2);
-  tft.setCursor(12, 16);  tft.print("WiFi: ClaWD-Mochi");
-  tft.setTextColor(C_MUTED);  tft.setTextSize(1);
-  tft.setCursor(12, 44);  tft.print("password: clawd1234");
-  tft.setTextColor(C_WHITE);  tft.setTextSize(2);
-  tft.setCursor(12, 68);  tft.print("Open browser:");
-  tft.setTextColor(C_ORANGE); tft.setTextSize(2);
-  tft.setCursor(12, 94);  tft.print("192.168.4.1");
-  tft.setTextColor(C_MUTED);  tft.setTextSize(1);
-  tft.setCursor(12, 124); tft.print("press any button to start");
+  drawUsbReadyView();
 
-  // ── Register routes ────────────────────────────────────────
-  server.on("/",            HTTP_GET, routeRoot);
-  server.on("/cmd",         HTTP_GET, routeCmd);
-  server.on("/char",        HTTP_GET, routeChar);
-  server.on("/speed",       HTTP_GET, routeSpeed);
-  server.on("/redraw",      HTTP_GET, routeRedraw);
-  server.on("/canvas",      HTTP_GET, routeCanvas);
-  server.on("/draw/clear",  HTTP_GET, routeDrawClear);
-  server.on("/draw/stroke", HTTP_GET, routeDrawStroke);
-  server.on("/backlight",   HTTP_GET, routeBacklight);
-  server.on("/state",       HTTP_GET, routeState);
-  server.onNotFound(routeNotFound);
-  server.begin();
-
-  // WiFi info stays on screen — first button press triggers setView/cmd
-  // which will replace it with the correct view
+  // USB 待连接画面会保留到第一次收到命令，收到命令后切换到对应画面。
 }
 
-// ═════════════════════════════════════════════════════════════
-//  LOOP
-// ═════════════════════════════════════════════════════════════
+// 主循环
 
-void loop() { server.handleClient(); }
+void loop() { processUsbSerial(); updateBlinkLoop(); }
+
+

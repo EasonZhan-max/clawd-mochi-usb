@@ -1,0 +1,648 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clawd Mochi USB Controller</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Consolas, Monaco, ui-monospace, monospace;
+      background: #181a1f;
+      color: #f1eee8;
+      display: grid;
+      place-items: start center;
+      padding: 24px;
+    }
+    main { width: min(540px, 100%); display: grid; gap: 16px; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    h1 { margin: 0; font-size: 24px; color: #ff6b4a; }
+    .panel {
+      border: 1px solid #343842;
+      border-radius: 8px;
+      background: #20232b;
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+    }
+    .row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .row.single { grid-template-columns: 1fr; }
+    .loop-box {
+      border: 1px solid #3a3f4b;
+      border-radius: 8px;
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+    .loop-title { color: #b8b4ad; font-size: 13px; }
+    .emote-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .emote-check {
+      min-height: 38px;
+      border: 1px solid #454a56;
+      border-radius: 6px;
+      background: #252934;
+      color: #f1eee8;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 10px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .emote-check input {
+      width: 16px;
+      height: 16px;
+      min-height: auto;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      accent-color: #78d09c;
+    }
+    button, input, select {
+      min-height: 42px;
+      border-radius: 6px;
+      border: 1px solid #454a56;
+      background: #2a2e38;
+      color: #f1eee8;
+      font: inherit;
+      padding: 0 12px;
+    }
+    button { cursor: pointer; font-weight: 700; }
+    button.primary { background: #d93116; border-color: #f05a3d; }
+    button.active { background: #39554a; border-color: #78d09c; color: #d9ffe6; }
+    button.compact { min-height: 36px; white-space: nowrap; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    label { display: grid; gap: 6px; color: #b8b4ad; font-size: 13px; }
+    .inline { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+    .canvas-wrap { display: grid; place-items: center; }
+    #drawCanvas {
+      width: min(100%, 320px);
+      aspect-ratio: 1;
+      border: 1px solid #454a56;
+      border-radius: 6px;
+      background: #ff0000;
+      cursor: crosshair;
+      touch-action: none;
+    }
+    #log {
+      min-height: 130px;
+      max-height: 240px;
+      overflow: auto;
+      white-space: pre-wrap;
+      color: #b8ffcf;
+      background: #111318;
+      border: 1px solid #343842;
+      border-radius: 6px;
+      padding: 10px;
+      font-size: 13px;
+    }
+    .status { color: #b8b4ad; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="topbar">
+      <h1>Clawd Mochi USB</h1>
+      <button id="langToggle" class="compact" type="button">ZH</button>
+    </div>
+
+    <div class="panel">
+      <button id="connect" class="primary" data-i18n="connect">Connect ESP32</button>
+      <div id="status" class="status" data-i18n="disconnected">Disconnected</div>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <button data-cmd="w" data-i18n="normalEyes">Normal Eyes</button>
+        <button data-cmd="s" data-i18n="squishEyes">Squish Eyes</button>
+        <button data-cmd="c">Claude Code</button>
+        <button data-cmd="a">Logo</button>
+        <button data-cmd="x" data-i18n="helloXinhua">Hello Xinhua</button>
+        <button data-cmd="e">Hello Eason</button>
+        <button data-cmd="z" data-i18n="sleep">Sleep</button>
+      </div>
+      <div class="row single">
+        <button data-cmd="t" data-i18n="statusScreen">Status Screen</button>
+      </div>
+      <div class="row single">
+        <button id="resetView" data-i18n="resetView">Reset View</button>
+      </div>
+      <div class="loop-box">
+        <div class="loop-title" data-i18n="loopSelectTitle">Loop Emotes</div>
+        <div class="emote-grid">
+          <label class="emote-check"><input type="checkbox" class="loop-pick" value="w" checked><span data-i18n="normalEyes">Normal Eyes</span></label>
+          <label class="emote-check"><input type="checkbox" class="loop-pick" value="s" checked><span data-i18n="squishEyes">Squish Eyes</span></label>
+          <label class="emote-check"><input type="checkbox" class="loop-pick" value="c" checked><span>Claude Code</span></label>
+          <label class="emote-check"><input type="checkbox" class="loop-pick" value="a" checked><span>Logo</span></label>
+          <label class="emote-check"><input type="checkbox" class="loop-pick" value="x" checked><span data-i18n="helloXinhua">Hello Xinhua</span></label>
+          <label class="emote-check"><input type="checkbox" class="loop-pick" value="e" checked><span>Hello Eason</span></label>
+          <label class="emote-check"><input type="checkbox" class="loop-pick" value="z" checked><span data-i18n="sleep">Sleep</span></label>
+          <label class="emote-check"><input type="checkbox" class="loop-pick" value="b" checked><span data-i18n="blink">Blink</span></label>
+        </div>
+      </div>
+      <div class="row single">
+        <button id="loopEmotes" data-i18n="loopEmotes">Loop Emotes</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <label>
+        <span data-i18n="speed">Speed</span>
+        <select id="speed">
+          <option value="1" data-i18n="slow">Slow</option>
+          <option value="2" data-i18n="normal">Normal</option>
+          <option value="3" data-i18n="fast">Fast</option>
+        </select>
+      </label>
+      <label>
+        <span data-i18n="backgroundColor">Background Color</span>
+        <input id="bg" type="color" value="#ff0000">
+      </label>
+      <div class="row">
+        <button id="displayOn" data-i18n="displayOn">Display On</button>
+        <button id="displayOff" data-i18n="displayOff">Display Off</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <button id="canvasOn" data-i18n="canvasMode">Canvas Mode</button>
+        <button id="clearCanvas" data-i18n="clearCanvas">Clear Canvas</button>
+      </div>
+      <label>
+        <span data-i18n="penColor">Pen Color</span>
+        <input id="pen" type="color" value="#ffffff">
+      </label>
+      <div class="canvas-wrap">
+        <canvas id="drawCanvas" width="240" height="240"></canvas>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <button data-cmd="d">Terminal</button>
+        <button data-cmd="q" data-i18n="exitTerminal">Exit Terminal</button>
+      </div>
+      <label>
+        <span data-i18n="terminalText">Terminal Text</span>
+        <div class="inline">
+          <input id="text" placeholder="hello mochi" data-i18n-placeholder="terminalPlaceholder">
+          <button id="sendText" data-i18n="send">Send</button>
+        </div>
+      </label>
+    </div>
+
+    <div id="log"></div>
+  </main>
+
+  <script>
+    let port;
+    let writer;
+    let reader;
+    let keepReading = false;
+    let readPromise = null;
+    let drawing = false;
+    let lastPoint = null;
+    let strokePoints = [];
+    let loopTimer = null;
+    let loopIndex = 0;
+    let blinkLoopActive = false;
+    let lang = localStorage.getItem('clawdMochiLang') || 'en';
+
+    const i18n = {
+      en: {
+        langButton: '\u4e2d\u6587',
+        connect: 'Connect ESP32',
+        disconnect: 'Disconnect ESP32',
+        disconnected: 'Disconnected',
+        connected: 'Connected',
+        connectionFailed: 'Connection failed',
+        normalEyes: 'Normal Eyes',
+        helloXinhua: 'Hello Xinhua',
+        squishEyes: 'Squish Eyes',
+        sleep: 'Sleep',
+        blink: 'Blink',
+        exitTerminal: 'Exit Terminal',
+        statusScreen: 'Status Screen',
+        speed: 'Speed',
+        slow: 'Slow',
+        normal: 'Normal',
+        fast: 'Fast',
+        backgroundColor: 'Background Color',
+        displayOn: 'Display On',
+        displayOff: 'Display Off',
+        resetView: 'Reset View',
+        loopSelectTitle: 'Loop Emote Selection',
+        loopEmotes: 'Loop Emotes',
+        stopLoop: 'Stop Loop',
+        blinkLoop: 'Blink Loop',
+        stopBlinkLoop: 'Stop Blink',
+        canvasMode: 'Canvas Mode',
+        clearCanvas: 'Clear Canvas',
+        penColor: 'Pen Color',
+        terminalText: 'Terminal Text',
+        terminalPlaceholder: 'hello mochi',
+        send: 'Send',
+        noEmotesSelected: 'Select at least one emote for the loop.',
+        notConnected: 'ESP32 is not connected',
+        sendFailed: 'Send failed: ',
+        readStopped: 'Read stopped: ',
+        connectedLog: 'Connected. If prompted, choose USB JTAG/serial debug unit, not COM1.',
+        disconnectLog: 'Disconnected',
+        unsupported: 'Use Chrome or Edge. Web Serial is not supported here.',
+        busyHint: 'Close Arduino Serial Monitor and any other page using COM3, then unplug/replug ESP32.'
+      },
+      zh: {
+        langButton: 'English',
+        connect: '\u8fde\u63a5 ESP32',
+        disconnect: '\u65ad\u5f00 ESP32',
+        disconnected: '\u672a\u8fde\u63a5',
+        connected: '\u5df2\u8fde\u63a5',
+        connectionFailed: '\u8fde\u63a5\u5931\u8d25',
+        normalEyes: '\u6b63\u5e38\u773c\u775b',
+        helloXinhua: 'Hello Xinhua',
+        squishEyes: '\u772f\u773c',
+        sleep: '\u7761\u89c9',
+        blink: '\u7728\u773c',
+        exitTerminal: '\u9000\u51fa Terminal',
+        statusScreen: '\u72b6\u6001\u753b\u9762',
+        speed: '\u901f\u5ea6',
+        slow: '\u6162',
+        normal: '\u6b63\u5e38',
+        fast: '\u5feb',
+        backgroundColor: '\u80cc\u666f\u8272',
+        displayOn: '\u5c4f\u5e55\u5f00',
+        displayOff: '\u5c4f\u5e55\u5173',
+        resetView: '\u91cd\u7f6e\u753b\u9762',
+        loopSelectTitle: '\u9009\u62e9\u8981\u5faa\u73af\u7684\u8868\u60c5',
+        loopEmotes: '\u5faa\u73af\u8868\u60c5',
+        stopLoop: '\u505c\u6b62\u5faa\u73af',
+        blinkLoop: '\u7728\u773c\u5faa\u73af',
+        stopBlinkLoop: '\u505c\u6b62\u7728\u773c',
+        canvasMode: '\u753b\u5e03\u6a21\u5f0f',
+        clearCanvas: '\u6e05\u7a7a\u753b\u5e03',
+        penColor: '\u7b14\u5237\u989c\u8272',
+        terminalText: 'Terminal \u8f93\u5165',
+        terminalPlaceholder: 'hello mochi',
+        send: '\u53d1\u9001',
+        noEmotesSelected: '\u81f3\u5c11\u9009\u4e00\u4e2a\u8981\u5faa\u73af\u7684\u8868\u60c5\u3002',
+        notConnected: '\u8fd8\u6ca1\u8fde\u63a5 ESP32',
+        sendFailed: '\u53d1\u9001\u5931\u8d25\uff1a',
+        readStopped: '\u8bfb\u53d6\u4e2d\u65ad\uff1a',
+        connectedLog: '\u5df2\u8fde\u63a5\u3002\u5982\u679c\u5f39\u7a97\uff0c\u8bf7\u9009 USB JTAG/serial debug unit\uff0c\u4e0d\u8981\u9009 COM1\u3002',
+        disconnectLog: '\u5df2\u65ad\u5f00',
+        unsupported: '\u8bf7\u4f7f\u7528 Chrome \u6216 Edge\u3002\u5f53\u524d\u6d4f\u89c8\u5668\u4e0d\u652f\u6301 Web Serial\u3002',
+        busyHint: '\u5173\u95ed Arduino \u4e32\u53e3\u76d1\u89c6\u5668\u548c\u5176\u4ed6\u5360\u7528 COM3 \u7684\u9875\u9762\uff0c\u7136\u540e\u62d4\u63d2 ESP32\u3002'
+      }
+    };
+
+    const connectBtn = document.getElementById('connect');
+    const langToggle = document.getElementById('langToggle');
+    const statusEl = document.getElementById('status');
+    const logEl = document.getElementById('log');
+    const speedInput = document.getElementById('speed');
+    const bgInput = document.getElementById('bg');
+    const penInput = document.getElementById('pen');
+    const canvasOnBtn = document.getElementById('canvasOn');
+    const drawCanvas = document.getElementById('drawCanvas');
+    const drawCtx = drawCanvas.getContext('2d');
+    const enc = new TextEncoder();
+    const dec = new TextDecoder();
+
+    function t(key) {
+      return i18n[lang][key] || i18n.en[key] || key;
+    }
+
+    function applyLanguage() {
+      document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+      langToggle.textContent = t('langButton');
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        el.textContent = t(el.dataset.i18n);
+      });
+      document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+        el.placeholder = t(el.dataset.i18nPlaceholder);
+      });
+      if (loopTimer) {
+        document.getElementById('loopEmotes').textContent = t('stopLoop');
+      }
+      if (port) {
+        connectBtn.textContent = t('disconnect');
+        statusEl.textContent = t('connected');
+      } else {
+        connectBtn.textContent = t('connect');
+        statusEl.textContent = t('disconnected');
+      }
+    }
+
+    function log(msg) {
+      logEl.textContent += msg + '\n';
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    async function sendLine(line) {
+      if (!writer) {
+        log(t('notConnected'));
+        return false;
+      }
+      try {
+        await writer.write(enc.encode(line + '\n'));
+        log('> ' + line);
+        return true;
+      } catch (e) {
+        log(t('sendFailed') + e.message);
+        return false;
+      }
+    }
+
+    async function readLoop() {
+      keepReading = true;
+      while (keepReading && port && port.readable) {
+        reader = port.readable.getReader();
+        try {
+          for (;;) {
+            const result = await reader.read();
+            if (result.done) break;
+            if (result.value) {
+              const text = dec.decode(result.value).trim();
+              if (text) log(text);
+            }
+          }
+        } catch (e) {
+          if (keepReading) log(t('readStopped') + e.message);
+        } finally {
+          reader.releaseLock();
+          reader = null;
+        }
+      }
+    }
+
+    async function disconnect() {
+      keepReading = false;
+      try { if (reader) await reader.cancel(); } catch (e) {}
+      try { if (readPromise) await readPromise; } catch (e) {}
+      readPromise = null;
+      try {
+        if (writer) {
+          writer.releaseLock();
+          writer = null;
+        }
+      } catch (e) {}
+      try {
+        if (port) {
+          await port.close();
+          port = null;
+        }
+      } catch (e) {}
+      applyLanguage();
+      log(t('disconnectLog'));
+    }
+
+    function resetPreview() {
+      drawCtx.fillStyle = bgInput.value;
+      drawCtx.fillRect(0, 0, drawCanvas.width, drawCanvas.height);
+    }
+
+    function canvasPos(evt) {
+      const rect = drawCanvas.getBoundingClientRect();
+      const x = (evt.clientX - rect.left) * drawCanvas.width / rect.width;
+      const y = (evt.clientY - rect.top) * drawCanvas.height / rect.height;
+      return {
+        x: Math.max(0, Math.min(239, Math.round(x))),
+        y: Math.max(0, Math.min(239, Math.round(y)))
+      };
+    }
+
+    function drawPreviewLine(from, to) {
+      drawCtx.strokeStyle = penInput.value;
+      drawCtx.lineWidth = 3;
+      drawCtx.lineCap = 'round';
+      drawCtx.beginPath();
+      drawCtx.moveTo(from.x, from.y);
+      drawCtx.lineTo(to.x, to.y);
+      drawCtx.stroke();
+    }
+
+    async function startDraw(evt) {
+      evt.preventDefault();
+      if (!canvasOnBtn.classList.contains('active')) {
+        canvasOnBtn.classList.add('active');
+        resetPreview();
+        await sendLine('/draw/clear?bg=' + encodeURIComponent(bgInput.value));
+      }
+      drawing = true;
+      lastPoint = canvasPos(evt);
+      strokePoints = [lastPoint];
+      drawCtx.fillStyle = penInput.value;
+      drawCtx.beginPath();
+      drawCtx.arc(lastPoint.x, lastPoint.y, 2, 0, Math.PI * 2);
+      drawCtx.fill();
+    }
+
+    function moveDraw(evt) {
+      if (!drawing) return;
+      evt.preventDefault();
+      const point = canvasPos(evt);
+      if (point.x === lastPoint.x && point.y === lastPoint.y) return;
+      drawPreviewLine(lastPoint, point);
+      strokePoints.push(point);
+      lastPoint = point;
+    }
+
+    async function endDraw(evt) {
+      if (!drawing) return;
+      evt.preventDefault();
+      drawing = false;
+      if (strokePoints.length < 1) return;
+      const stride = Math.max(1, Math.ceil(strokePoints.length / 220));
+      const pts = strokePoints
+        .filter((_, index) => index % stride === 0 || index === strokePoints.length - 1)
+        .map(point => point.x + ',' + point.y)
+        .join(';');
+      const pen = penInput.value.replace('#', '');
+      strokePoints = [];
+      await sendLine('/draw/stroke?pen=' + pen + '&pts=' + pts);
+    }
+
+    langToggle.addEventListener('click', () => {
+      lang = lang === 'en' ? 'zh' : 'en';
+      localStorage.setItem('clawdMochiLang', lang);
+      applyLanguage();
+    });
+
+    connectBtn.addEventListener('click', async () => {
+      if (port) {
+        await disconnect();
+        return;
+      }
+      if (!('serial' in navigator)) {
+        statusEl.textContent = t('unsupported');
+        return;
+      }
+      try {
+        connectBtn.disabled = true;
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 115200 });
+        writer = port.writable.getWriter();
+        applyLanguage();
+        log(t('connectedLog'));
+        readPromise = readLoop();
+      } catch (e) {
+        port = null;
+        writer = null;
+        statusEl.textContent = t('connectionFailed');
+        log(t('connectionFailed') + ': ' + e.message);
+        log(t('busyHint'));
+      } finally {
+        connectBtn.disabled = false;
+      }
+    });
+
+    document.querySelectorAll('[data-cmd]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        stopEmoteLoop();
+        if (blinkLoopActive) setBlinkLoopUi(false);
+        await sendLine('/cmd?k=' + encodeURIComponent(btn.dataset.cmd));
+      });
+    });
+
+    function loopDelayMs() {
+      if (speedInput.value === '3') return 3200;
+      if (speedInput.value === '2') return 4300;
+      return 5600;
+    }
+
+    function restartEmoteLoopTimer() {
+      if (!loopTimer) return;
+      clearInterval(loopTimer);
+      loopTimer = setInterval(playNextEmote, loopDelayMs());
+    }
+
+    speedInput.addEventListener('change', e => {
+      sendLine('/speed?v=' + e.target.value);
+      restartEmoteLoopTimer();
+    });
+
+    bgInput.addEventListener('input', e => {
+      resetPreview();
+      sendLine('/redraw?bg=' + encodeURIComponent(e.target.value));
+    });
+
+    document.getElementById('displayOn').addEventListener('click', () => sendLine('/backlight?on=1'));
+    document.getElementById('displayOff').addEventListener('click', () => sendLine('/backlight?on=0'));
+
+    document.getElementById('resetView').addEventListener('click', async () => {
+      stopEmoteLoop();
+      if (blinkLoopActive) await sendLine('/cmd?k=b');
+      setBlinkLoopUi(false);
+      bgInput.value = '#ff0000';
+      speedInput.value = '1';
+      canvasOnBtn.classList.remove('active');
+      resetPreview();
+      await sendLine('/backlight?on=1');
+      await sendLine('/speed?v=1');
+      await sendLine('/redraw?bg=' + encodeURIComponent(bgInput.value));
+      await sendLine('/cmd?k=w');
+    });
+
+    function stopEmoteLoop() {
+      if (loopTimer) {
+        clearInterval(loopTimer);
+        loopTimer = null;
+      }
+      document.getElementById('loopEmotes').classList.remove('active');
+      document.getElementById('loopEmotes').textContent = t('loopEmotes');
+    }
+
+    function setBlinkLoopUi(active) {
+      blinkLoopActive = active;
+    }
+
+    function getSelectedEmotes() {
+      return Array.from(document.querySelectorAll('.loop-pick:checked')).map(el => el.value);
+    }
+
+    async function playNextEmote() {
+      const sequence = getSelectedEmotes();
+      if (sequence.length === 0) {
+        if (blinkLoopActive) await sendLine('/cmd?k=b');
+        setBlinkLoopUi(false);
+        stopEmoteLoop();
+        log(t('noEmotesSelected'));
+        return;
+      }
+      if (loopIndex >= sequence.length) loopIndex = 0;
+      const key = sequence[loopIndex];
+      await sendLine('/speed?v=' + speedInput.value);
+      if (key === 'b') {
+        if (!blinkLoopActive) {
+          const ok = await sendLine('/cmd?k=b');
+          if (ok) setBlinkLoopUi(true);
+        }
+      } else {
+        await sendLine('/cmd?k=' + key);
+        setBlinkLoopUi(false);
+      }
+      loopIndex = (loopIndex + 1) % sequence.length;
+    }
+
+    document.getElementById('loopEmotes').addEventListener('click', async () => {
+      const btn = document.getElementById('loopEmotes');
+      if (loopTimer) {
+        if (blinkLoopActive) await sendLine('/cmd?k=b');
+        setBlinkLoopUi(false);
+        stopEmoteLoop();
+        return;
+      }
+      if (getSelectedEmotes().length === 0) {
+        log(t('noEmotesSelected'));
+        return;
+      }
+      if (blinkLoopActive) await sendLine('/cmd?k=b');
+      setBlinkLoopUi(false);
+      loopIndex = 0;
+      btn.classList.add('active');
+      btn.textContent = t('stopLoop');
+      await sendLine('/speed?v=' + speedInput.value);
+      await playNextEmote();
+      loopTimer = setInterval(playNextEmote, loopDelayMs());
+    });
+
+    canvasOnBtn.addEventListener('click', async () => {
+      const ok = await sendLine('/canvas?on=1');
+      if (ok) {
+        canvasOnBtn.classList.add('active');
+        resetPreview();
+      }
+    });
+
+    document.getElementById('clearCanvas').addEventListener('click', async () => {
+      resetPreview();
+      await sendLine('/draw/clear?bg=' + encodeURIComponent(bgInput.value));
+    });
+
+    document.getElementById('sendText').addEventListener('click', () => {
+      const val = document.getElementById('text').value;
+      sendLine('/text?s=' + encodeURIComponent(val));
+    });
+
+    drawCanvas.addEventListener('pointerdown', startDraw);
+    drawCanvas.addEventListener('pointermove', moveDraw);
+    drawCanvas.addEventListener('pointerup', endDraw);
+    drawCanvas.addEventListener('pointerleave', endDraw);
+    drawCanvas.addEventListener('pointercancel', endDraw);
+
+    applyLanguage();
+    resetPreview();
+  </script>
+</body>
+</html>
+
+
+
+
+
+
+

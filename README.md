@@ -1,238 +1,302 @@
-<!-- LOGO -->
-<p align="center">
-  <img src="pics/clawd_mochi_banner.png" alt="Clawd Mochi Logo" width="700"/>
-</p>
-
-# Clawd Mochi 🦀🤖
-
-A physical desk companion inspired by **Clawd** — the pixel-crab mascot of Claude Code by Anthropic. An ESP32-C3 drives a 1.54" color TFT display and hosts a mobile web controller — no app, no internet, no cloud required.
-
-**Cost: ~$6–8 · Build time: ~1 hour · Skill level: Beginner**
-
-Support the project on Instagram: [![Instagram](https://img.shields.io/badge/Instagram-E4405F?logo=instagram&logoColor=fff&style=for-the-badge)](https://instagram.com/clawd.mochi)
-
-📦 3D printable case on MakerWorld: [https://makerworld.com/en/models/2559505-clawd-mochi-physical-claude-code-mascot#profileId-2820000](https://makerworld.com/en/models/2559505-clawd-mochi-physical-claude-code-mascot#profileId-2820000)
-
----
-
-> ⚠️ This is an independent fan project. It is not affiliated with, sponsored by, or endorsed by Anthropic. "Claude" and "Clawd" are trademarks of Anthropic.
-
----
-
-<p align="center">
-  <img src="pics/clawd_mochi_3_4.jpeg" alt="Assembled Clawd Mochi on a desk" width="500"/>
-  &nbsp;
-  <img src="pics/clawd_mochi_claude_code.jpeg" alt="Claude Code view" width="500"/>
-</p>
-
-## What it does
-
-Clawd Mochi sits on your desk and shows animated expressions on a small color display. You control it from any phone or browser by connecting to its built-in WiFi hotspot:
-
-- **Normal eyes** — pixel-art square eyes with wiggle and blink animations
-- **Squish eyes** — `> <` happy squint with open/close animation
-- **Claude Code** — displays "Claude Code" with an interactive terminal
-- **Canvas** — draw anything on the display from your phone in real time
-
----
-
-## Parts list
-
-| Part                | Spec                             | ~Price |
-| ------------------- | -------------------------------- | ------ |
-| ESP32-C3 Super Mini | microcontroller with WiFi        | ~$2.50 |
-| ST7789 1.54" TFT    | 240×240 SPI color display        | ~$3.00 |
-| 8 short wires       | 8–10 cm Dupont / jumper wires    | ~$0.50 |
-| 2× M2×6mm screws    | to mount display bezel           | ~$0.10 |
-| Double-sided tape   | to secure components inside case | ~$0.10 |
-| USB-C cable         | for power                        | —      |
-| 3D printed case     | PLA or PETG, ~30g                | ~$0.50 |
-
-**Total: ~$7–8**
-
----
-
-## Wiring
-
-> ⚠️ Connect VCC to **3.3V only** — never 5V. Use GPIO 8 and 10 for SPI (hardware SPI, fast). Do not use GPIO 6/7 for SPI.
-
-| Display pin | ESP32-C3 GPIO  | Wire color (suggested) |
-| ----------- | -------------- | ---------------------- |
-| VCC         | 3V3            | Red                    |
-| GND         | GND            | Black                  |
-| SDA         | GPIO 10 (MOSI) | Orange                 |
-| SCL         | GPIO 8 (SCK)   | Green                  |
-| RES         | GPIO 2         | Purple                 |
-| DC          | GPIO 1         | Blue                   |
-| CS          | GPIO 4         | White                  |
-| BL          | GPIO 3         | Yellow                 |
-
----
-
-## Software setup
-
-### Step 1 — Install Arduino IDE
-
-Download [Arduino IDE 2.x](https://www.arduino.cc/en/software) and install it.
-
-### Step 2 — Add ESP32 board support
-
-1. Open Arduino IDE → **File → Preferences**
-2. In "Additional boards manager URLs" paste:
-   ```
-   https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
-   ```
-3. Go to **Tools → Board → Boards Manager**, search `esp32`, install **"esp32 by Espressif Systems"**
-
-### Step 3 — Install libraries
-
-Go to **Tools → Library Manager** and install both:
-
-- `Adafruit GFX Library`
-- `Adafruit ST7735 and ST7789 Library`
-
-### Step 4 — Configure board settings
-
-Go to **Tools** and set:
-
-| Setting         | Value                   |
-| --------------- | ----------------------- |
-| Board           | ESP32C3 Dev Module      |
-| USB CDC On Boot | **Enabled** ← important |
-| CPU Frequency   | 160 MHz                 |
-| Upload Speed    | 921600                  |
-
-### Step 5 — Upload the sketch
-
-1. Clone or download this repo
-2. Open `clawd_mochi/clawd_mochi.ino` in Arduino IDE
-3. Connect the ESP32 via USB-C
-4. Select the correct port under **Tools → Port**
-5. Click **Upload** (→ arrow button)
-6. Wait for "Hard resetting via RTS pin..." — this means success
-
----
-
-## How to use it
-
-### Connect and open the controller
-
-1. Power the ESP32 via USB-C (any USB charger or power bank)
-2. Wait ~3 seconds for the boot animation to finish
-3. On your phone or computer, go to **WiFi settings**
-4. Connect to the network: **`ClaWD-Mochi`** · password: **`clawd1234`**
-5. Open a browser and go to **`http://192.168.4.1`**
-
-You should see the web controller:
-
-<img src="pics/clawd_mochi_webpage.jpeg" alt="Webpage view" width="500"/>
-
-### Controller features
-
-| Button / control   | What it does                                    |
-| ------------------ | ----------------------------------------------- |
-| Normal eyes        | Plays wiggle + blink animation                  |
-| Squish eyes        | Plays open/close animation                      |
-| Claude Code        | Shows code display, opens terminal              |
-| Canvas             | Enter drawing mode — draw on display from phone |
-| Speed slider       | Controls animation speed (slow / normal / fast) |
-| Background color   | Changes background color of all views           |
-| Pen color          | Sets drawing color for canvas                   |
-| Display on/off     | Toggles the backlight                           |
-| ✓ done (in canvas) | Exits canvas mode                               |
-
----
-
-## 3D case
-
-The electronics case (body + back) is in the `clawd_mochi` model folder:
-
-| File                                                                                 | Description                               |
-| ------------------------------------------------------------------------------------ | ----------------------------------------- |
-| [`./models/clawd_mochi/clawd_mochi_v1.stl`](./models/clawd_mochi/clawd_mochi_v1.stl) | Main case layout with body and back parts |
-
-### Print settings
-
-| Setting      | Value                               |
-| ------------ | ----------------------------------- |
-| Material     | PLA or PETG                         |
-| Layer height | 0.15–0.20 mm                        |
-| Infill       | 15% gyroid                          |
-| Supports     | Yes — for display window overhang   |
-| Orientation  | Face-down, flat back on build plate |
-
-Suggested colors: orange PLA for body, matte black for back plate.
-
-You can also download the models from MakerWorld: [https://makerworld.com/en/models/2559505-clawd-mochi-physical-claude-code-mascot#profileId-2820000](https://makerworld.com/en/models/2559505-clawd-mochi-physical-claude-code-mascot#profileId-2820000)
-
-### 3D Clawd (no electronics)
-
-If you just want a display piece, use the separate 3D Clawd model (no screen or electronics cutouts).
-
-<img src="pics/clawd_3D_squished_eyes_4_3.png" alt="3D printed Clawd model with squished eyes" width="500"/>
-
-Model files:
-
-| File | Description |
-| ---- | ----------- |
-| [`./models/clawd_3d/clawd_3D_no_AMS.stl`](./models/clawd_3d/clawd_3D_no_AMS.stl) | Original Clawd 3D model |
-| [`./models/clawd_3d_squished_eyes/clawd_3D_squished_eyes_no_AMS.stl`](./models/clawd_3d_squished_eyes/clawd_3D_squished_eyes_no_AMS.stl) | Squished eyes variant |
-
-You can also download the models from MakerWorld: [https://makerworld.com/en/models/2576503-clawd-claude-code-mascot#profileId-2841183](https://makerworld.com/en/models/2576503-clawd-claude-code-mascot#profileId-2841183)
-
----
-
-## Assembly tips
-
-1. Print the case file (body + back) and test-fit the display before gluing anything
-2. Thread the 8 wires through the back plate slot before soldering
-3. Use double-sided tape to fix the ESP32 against the inside of the back plate
-4. Secure the display with 2× M2×6mm screws through the bezel holes
-5. Route the USB-C cable through the back plate slot and snap the back on
-
----
-
-## Customisation
-
-### Eye size and position
-
-Edit these constants near the top of `clawd_mochi.ino`:
-
-```cpp
-#define EYE_W   30    // eye width in pixels
-#define EYE_H   60    // eye height in pixels
-#define EYE_GAP 120   // gap between eyes
-#define EYE_OX  0     // horizontal offset
-#define EYE_OY  40    // vertical offset upward
+# Clawd Mochi USB 控制版
+
+这是一个基于 ESP32-C3 Super Mini 和 ST7789 1.54 寸 240x240 彩屏的小桌面表情屏项目。本仓库当前版本已经改成 USB 串口控制，不再使用 WiFi 热点控制。
+
+本项目基于原版 Clawd Mochi 改造，原项目作者为 yousifamanuel。Claude、Clawd 等名称归其对应权利方所有，本仓库只是个人学习和改造版本。
+
+## 当前版本功能
+
+- ESP32-C3 Super Mini 驱动 ST7789 1.54 寸 240x240 屏幕
+- 使用 USB 串口控制，不需要连 WiFi
+- 浏览器 HTML 控制页：`usb_controller.html`
+- 支持中英文界面切换
+- 支持表情按钮、循环表情选择、速度调节、背景色、背光开关
+- 支持自定义画布模式，可以在网页上画图并同步到屏幕
+- 支持 Terminal 输入
+
+## 文件说明
+
+| 文件/目录 | 作用 |
+| --- | --- |
+| `clawd_mochi/clawd_mochi.ino` | 烧录到 ESP32-C3 的 Arduino 固件 |
+| `usb_controller.html` | 电脑浏览器打开的 USB 控制页 |
+| `models/` | 3D 打印外壳模型 |
+| `pics/` | 项目图片 |
+| `README.md` | 中文使用和修改说明 |
+
+## 硬件清单
+
+| 硬件 | 说明 |
+| --- | --- |
+| ESP32-C3 Super Mini | 主控板 |
+| ST7789 1.54 寸 TFT 屏 | 240x240 SPI 彩屏 |
+| 杜邦线/焊线 | 连接屏幕和 ESP32 |
+| USB-C 数据线 | 烧录和控制都需要数据线，不只是充电线 |
+| 3D 打印外壳 | 可选 |
+
+## 接线方式
+
+| 屏幕引脚 | ESP32-C3 Super Mini |
+| --- | --- |
+| VCC | 3V3 |
+| GND | GND |
+| SDA | GPIO 10 |
+| SCL | GPIO 8 |
+| RES / RST | GPIO 2 |
+| DC | GPIO 1 |
+| CS | GPIO 4 |
+| BL | GPIO 3 |
+
+注意：VCC 接 3.3V，不要接 5V。
+
+## Arduino IDE 烧录教程
+
+1. 安装 Arduino IDE 2.x。
+2. 打开 Arduino IDE，进入 `文件 -> 首选项`。
+3. 在“其他开发板管理器地址”中加入：
+
+```text
+https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
 ```
 
-### Logo animation duration
+4. 进入 `工具 -> 开发板 -> 开发板管理器`，搜索并安装 `esp32 by Espressif Systems`。
+5. 进入 `工具 -> 管理库`，安装：
 
-```cpp
-// In animLogoReveal() — how long logo holds after animation
-delay(1500);       // milliseconds — change this number
-
-// Speed of the reveal drawing stroke by stroke
-delay(speedMs(8)); // lower = faster
+```text
+Adafruit GFX Library
+Adafruit ST7735 and ST7789 Library
 ```
 
----
+6. 打开文件：
 
-## Contributing
+```text
+clawd_mochi/clawd_mochi.ino
+```
 
-Contributions are very welcome! Here are some ideas:
+7. Arduino IDE 里建议这样设置：
 
-- **New animations** — add new expressions, transitions, or idle behaviors
-- **New views** — weather display, clock, notification badges, pixel art scenes
-- **Sound** — add a small buzzer for sound effects
-- **Sensors** — connect a touch sensor or button for physical interaction
-- **OTA updates** — add over-the-air firmware updates
-- **MQTT / Home Assistant** — connect to smart home platforms
+| 设置 | 值 |
+| --- | --- |
+| Board | ESP32C3 Dev Module |
+| USB CDC On Boot | Enabled |
+| Upload Speed | 921600 或 115200 |
+| Port | 选择 ESP32-C3 对应串口 |
 
-To contribute: fork the repo, make your changes, and open a pull request. Please keep the single-file structure (`clawd_mochi.ino`) so it stays easy for beginners to flash.
+8. 点击上传。
 
-## License
+如果提示 `COM3 busy` 或 `port is busy`，先关闭浏览器控制页连接、Arduino 串口监视器，拔插 ESP32 后再上传。
 
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+## 使用 HTML 控制页
 
-**Note:** 3D models and media assets are licensed under **CC BY-NC-SA 4.0**.
+1. 先把 `clawd_mochi.ino` 烧录到 ESP32-C3。
+2. 用 USB 数据线连接电脑和 ESP32-C3。
+3. 用 Chrome 或 Edge 打开：
+
+```text
+usb_controller.html
+```
+
+4. 点击页面上的 `连接 ESP32`。
+5. 浏览器弹窗里选择类似下面的串口：
+
+```text
+USB JTAG/serial debug unit
+```
+
+不要选 `COM1`。
+
+6. 连接成功后，就可以用网页按钮控制表情。
+
+## 控制页功能说明
+
+| 功能 | 说明 |
+| --- | --- |
+| 正常眼睛 | 左右看和眨眼动画 |
+| 眯眼 | 开心眯眼动画 |
+| Claude Code | 显示 Claude Code 画面 |
+| Logo | 显示 Logo 动画 |
+| Hello Xinhua | 打字机显示 Hello / Xinhua |
+| Hello Eason | 打字机显示 Hello / Eason |
+| Sleep | 黑屏睡觉动画 |
+| 状态画面 | 显示当前内部状态，主要用于调试 |
+| 重置画面 | 恢复默认红色背景和正常眼睛 |
+| 循环表情 | 按勾选项循环播放表情 |
+| 速度 | 控制动画速度 |
+| 背景色 | 修改表情背景色 |
+| 屏幕开/关 | 控制背光 |
+| 画布模式 | 在网页上画图并显示到屏幕 |
+| Terminal | 在屏幕上显示输入的文字 |
+
+## 串口命令
+
+控制页本质上是通过 USB 串口发送命令，波特率是 `115200`。
+
+常用命令：
+
+```text
+/cmd?k=w      正常眼睛
+/cmd?k=s      眯眼
+/cmd?k=c      Claude Code
+/cmd?k=a      Logo
+/cmd?k=x      Hello Xinhua
+/cmd?k=e      Hello Eason
+/cmd?k=z      Sleep 睡觉
+/cmd?k=b      眨眼循环开/关
+/cmd?k=d      进入 Terminal
+/cmd?k=q      退出 Terminal
+/status       显示状态画面
+/state        返回 JSON 状态
+/speed?v=1    慢速
+/speed?v=2    正常速度
+/speed?v=3    快速
+/redraw?bg=#ff0000 设置背景色
+/backlight?on=1 打开背光
+/backlight?on=0 关闭背光
+```
+
+## 怎么修改表情
+
+主要改这个文件：
+
+```text
+clawd_mochi/clawd_mochi.ino
+```
+
+### 修改眼睛大小和位置
+
+在文件顶部附近找到：
+
+```cpp
+#define EYE_W   30
+#define EYE_H   60
+#define EYE_GAP 120
+#define EYE_OX  0
+#define EYE_OY  40
+```
+
+含义：
+
+| 参数 | 作用 |
+| --- | --- |
+| `EYE_W` | 眼睛宽度 |
+| `EYE_H` | 眼睛高度 |
+| `EYE_GAP` | 两只眼睛之间的距离 |
+| `EYE_OX` | 整体左右偏移 |
+| `EYE_OY` | 整体上下偏移 |
+
+### 修改默认背景色
+
+在 `initColours()` 里找到：
+
+```cpp
+C_ORANGE = tft.color565(255, 0, 0);
+```
+
+这里当前是红色背景。比如改成蓝色：
+
+```cpp
+C_ORANGE = tft.color565(0, 80, 255);
+```
+
+### 修改 Hello 文案
+
+找到：
+
+```cpp
+void drawXinhuaView()
+void drawHelloEasonView()
+```
+
+里面的文字可以直接改，例如：
+
+```cpp
+drawTypewriterText2("Hello!", "Eason", 4, 4, C_BLACK, animBgColor);
+```
+
+### 新增一个表情
+
+1. 在 `.ino` 里新增一个绘制函数，比如：
+
+```cpp
+void drawMyFace() {
+  termMode = false;
+  tft.fillScreen(animBgColor);
+  tft.setTextColor(C_BLACK);
+  tft.setTextSize(3);
+  tft.setCursor(40, 100);
+  tft.print("My Face");
+}
+```
+
+2. 在 `routeCmd()` 里加一个命令：
+
+```cpp
+case 'm': drawMyFace(); break;
+```
+
+3. 在 `handleUsbCommand()` 的快捷字符列表里加入 `m`：
+
+```cpp
+String("wszcdaqtxebm")
+```
+
+4. 在 `usb_controller.html` 里增加按钮：
+
+```html
+<button data-cmd="m">My Face</button>
+```
+
+如果希望它出现在循环表情选择里，再加一个 checkbox：
+
+```html
+<label class="emote-check"><input type="checkbox" class="loop-pick" value="m" checked><span>My Face</span></label>
+```
+
+## 修改 HTML 控制页
+
+主要改：
+
+```text
+usb_controller.html
+```
+
+常见修改位置：
+
+| 想改什么 | 搜索关键词 |
+| --- | --- |
+| 按钮文字 | `data-i18n` 或按钮文本 |
+| 增加按钮 | `data-cmd` |
+| 循环表情选项 | `loop-pick` |
+| 中英文翻译 | `const i18n` |
+| 画布逻辑 | `drawCanvas`、`draw/stroke` |
+| 串口连接 | `navigator.serial` |
+
+注意：修改 HTML 后，浏览器里按 `Ctrl + F5` 强制刷新。
+
+## 常见问题
+
+### 连接失败或串口打不开
+
+先关闭：
+
+- Arduino 串口监视器
+- 其他正在连接 ESP32 的网页
+- 其他串口工具
+
+然后拔插 ESP32，再重新连接。
+
+### 上传失败，提示 port is busy
+
+这是串口被占用。关闭控制页连接和 Arduino 串口监视器，再上传。
+
+### HTML 页面没有串口选择弹窗
+
+请使用 Chrome 或 Edge。部分浏览器不支持 Web Serial。
+
+### 画布显示不一致
+
+尽量先点击“画布模式”或直接在画布上开始画。当前版本开始画时会自动清空并同步屏幕画布。
+
+## 许可证
+
+原项目包含 `LICENSE` 文件。本仓库保留原许可证和原作者署名信息。
